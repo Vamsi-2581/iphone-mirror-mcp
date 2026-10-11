@@ -30,6 +30,11 @@ let package = Package(
             dependencies: ["MirrorServer"],
             swiftSettings: commonSwiftSettings
         ),
+        .executableTarget(
+            name: "restricted-offline-checks",
+            dependencies: ["MirrorCore", "MirrorServer"],
+            swiftSettings: commonSwiftSettings
+        ),
         .testTarget(
             name: "MirrorCoreTests",
             dependencies: ["MirrorCore"],

@@ -1,0 +1,111 @@
+#if DEBUG
+// Offline checks execute the real gate against injected mock frames, never a phone.
+import Foundation
+func XCTFail(_ message: String) { fatalError(message) }
+func XCTAssertEqual<T: Equatable>(_ lhs: T, _ rhs: T) { if lhs != rhs { fatalError("Expected equal values") } }
+func XCTAssertThrowsError<T>(_ body: @autoclosure () throws -> T) {
+    do { _ = try body() } catch { return }
+    fatalError("Expected rejection")
+}
+import CoreGraphics
+@testable import MirrorCore
+@testable import MirrorServer
+
+private actor FakeNavigation {
+    var frames: [RestrictedFrame]
+    var posts = 0
+    init(_ frames: [RestrictedFrame]) { self.frames = frames }
+    func read() throws -> RestrictedFrame {
+        guard !frames.isEmpty else { throw MirrorError("No mock frame") }
+        return frames.removeFirst()
+    }
+    func post() { posts += 1 }
+    func count() -> Int { posts }
+}
+struct NavigationGateTests {
+    func frame(_ text: String, x: CGFloat = 20) -> RestrictedFrame {
+        RestrictedFrame(geometry: WindowGeometry(windowID: 1,
+            boundsPoints: CGRect(x: 0, y: 0, width: 300, height: 600),
+            imagePixelSize: CGSize(width: 600, height: 1200)), elements: [
+                OCRElement(text: text, confidence: 0.99, box: CGRect(x: x, y: 300, width: 100, height: 40))
+            ])
+    }
+    func plan(operation: String = "back", expiry: Double = Date().timeIntervalSince1970 + 60) -> NavigationApproval {
+        NavigationApproval(windowID: 1, x: 0, y: 0, width: 300, height: 600,
+            expiresAt: expiry, steps: [.init(id: "one", operation: operation,
+                beforeText: "Before", afterText: "After", targetText: "Before")])
+    }
+    private func gate(_ plan: NavigationApproval?, _ fake: FakeNavigation) -> NavigationGate {
+        NavigationGate(approval: plan, read: { _, _ in try await fake.read() },
+                       input: { _, _, _ in await fake.post() })
+    }
+    func fails(_ gate: NavigationGate, id: String = "one") async {
+        do { try await gate.navigate(id: id); XCTFail("must reject") } catch {}
+    }
+    func testNoApprovalDoesNotReadOrPost() async {
+        let fake = FakeNavigation([frame("Before")]); let gate = gate(nil, fake)
+        await fails(gate)
+        let count = await fake.count(); XCTAssertEqual(count, 0)
+        do { _ = try await gate.readScreen(); XCTFail("read must reject") } catch {}
+    }
+    func testExpiredAndWrongStepDoNotPost() async {
+        for p in [plan(expiry: 0), plan()] {
+            let fake = FakeNavigation([frame("Before")]); let gate = gate(p, fake)
+            await fails(gate, id: "unapproved")
+            let count = await fake.count(); XCTAssertEqual(count, 0)
+        }
+    }
+    func testScreenDriftStopsBeforePosting() async {
+        let fake = FakeNavigation([frame("Before"), frame("Before", x: 150)])
+        let gate = gate(plan(), fake); await fails(gate)
+        let count = await fake.count(); XCTAssertEqual(count, 0)
+        await fails(gate)
+    }
+    func testVerifiedStepIsSingleUse() async throws {
+        let fake = FakeNavigation([frame("Before"), frame("Before"), frame("After")])
+        let gate = gate(plan(), fake)
+        try await gate.navigate(id: "one"); await fails(gate)
+        let count = await fake.count(); XCTAssertEqual(count, 1)
+    }
+    func testPostVerificationFailureDoesNotRetryInput() async {
+        let fake = FakeNavigation([frame("Before"), frame("Before")])
+        let gate = gate(plan(), fake); await fails(gate); await fails(gate)
+        let count = await fake.count(); XCTAssertEqual(count, 1)
+    }
+    func testStopDisarmsAndInvalidPlansReject() async {
+        let fake = FakeNavigation([frame("Before")]); let gate = gate(plan(), fake)
+        await gate.stop(); await fails(gate)
+        let count = await fake.count(); XCTAssertEqual(count, 0)
+        XCTAssertThrowsError(try plan(operation: "type_text").validate(now: Date().timeIntervalSince1970))
+        XCTAssertThrowsError(try plan(expiry: Date().timeIntervalSince1970 + 1000).validate(now: Date().timeIntervalSince1970))
+    }
+    func testExtraCoordinatesCannotBeSuppliedThroughMCP() {
+        XCTAssertThrowsError(try ToolArgs(["step_id": "one", "x": 100]).only(["step_id"]))
+    }
+}
+
+@main
+struct OfflineMain {
+    static func main() async throws {
+        let checks = NavigationGateTests()
+        await checks.testNoApprovalDoesNotReadOrPost()
+        await checks.testExpiredAndWrongStepDoNotPost()
+        await checks.testScreenDriftStopsBeforePosting()
+        try await checks.testVerifiedStepIsSingleUse()
+        await checks.testPostVerificationFailureDoesNotRetryInput()
+        await checks.testStopDisarmsAndInvalidPlansReject()
+        checks.testExtraCoordinatesCannotBeSuppliedThroughMCP()
+        print("PASS: 7 restricted navigation safety checks; real device input disabled (mock dependencies only).")
+    }
+}
+
+#else
+import Foundation
+@main
+struct OfflineMain {
+    static func main() {
+        FileHandle.standardError.write(Data("Offline checks require a debug build. Use swift run restricted-offline-checks.\n".utf8))
+        exit(2)
+    }
+}
+#endif

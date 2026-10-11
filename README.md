@@ -2,7 +2,7 @@
 
 A restricted fork of [nickatnight96/iphone-mirror-mcp](https://github.com/nickatnight96/iphone-mirror-mcp), based on commit `5a676528ec7779ec49927f7469c7aebc0806125c`. MIT license and upstream copyright are preserved. Upstream gesture-engine attribution is retained in source comments.
 
-**Experimental source, not yet build-tested or device-validated. Do not treat this as an Instagram inbox collector.** The local collector still uses its existing manual workflow. This fork is a separate, unconnected backend candidate.
+**Experimental source: debug build and targeted offline checks pass; device behavior is unverified. Do not treat this as an Instagram inbox collector.** The local collector still uses its existing manual workflow. This fork is a separate, unconnected backend candidate.
 
 ## Changes
 
@@ -16,7 +16,7 @@ A restricted fork of [nickatnight96/iphone-mirror-mcp](https://github.com/nickat
 
 ## Approval and use
 
-Build and local execution need explicit operator approval. After approval, use `swift build` and `swift test` from this directory. Do not enable `MIRROR_MCP_LIVE`; legacy live tests can drive a real phone. A future device test must use a harmless Settings screen first.
+Build and local execution need explicit operator approval. After approval, use `scripts/run_tests.sh` from this directory for the debug build, mock safety checks, static restrictions and real stdio checks. The full upstream XCTest suite requires Xcode with XCTest; `scripts/run_tests.sh --full` attempts it. The currently installed Command Line Tools cannot compile XCTest. Do not enable `MIRROR_MCP_LIVE`; legacy live tests can drive a real phone. A future device test must use a harmless Settings screen first.
 
 After successful build/tests, a trusted local operator prepares a file outside the repository with mode `0600`. Never commit a real approval file: it may contain private text and window information. The file must be owned by the launching user, cannot be a symlink, and cannot exceed 16 KiB. `expiresAt` is a Unix timestamp no more than 15 minutes after startup. `windowID`, x/y/width/height must identify the current visible Mirroring window. All labels are exact OCR strings.
 
@@ -38,4 +38,4 @@ Open, resume, and focus iPhone Mirroring manually. A trusted local client launch
 
 ## Validation status
 
-Swift syntax parsing and static restriction checks have passed. Regression tests for the parent Python collector passed (52 tests). New Swift safety/protocol tests are committed, but compilation, Swift tests, MCP runtime transport, ScreenCaptureKit capture, coordinate mapping, scroll behavior, and actual device cancellation remain unverified until an approved build and Settings-only test. See [SECURITY.md](SECURITY.md) before connecting a client.
+On 2026-10-11, the debug fork compiled successfully on Apple Silicon with all seven dependency versions/revisions pinned by Package.resolved. Seven safety checks exercised the actual NavigationGate with mock frames/input, and a real stdio client verified initialize, the exact four-tool catalog and 21 tool calls without an approval file. Static restriction checks passed. The full upstream XCTest suite could not compile because the installed Command Line Tools lack XCTest; those tests are not reported as passing. The parent Python collector separately passed 52 regression tests. ScreenCaptureKit capture, coordinate mapping, scroll behavior, approved-plan MCP execution and actual device cancellation remain unverified until a Settings-only test. See [SECURITY.md](SECURITY.md) before connecting a client.

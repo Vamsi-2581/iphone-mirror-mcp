@@ -27,7 +27,7 @@ final class NavigationGateTests: XCTestCase {
             expiresAt: expiry, steps: [.init(id: "one", operation: operation,
                 beforeText: "Before", afterText: "After", targetText: "Before")])
     }
-    func gate(_ plan: NavigationApproval?, _ fake: FakeNavigation) -> NavigationGate {
+    private func gate(_ plan: NavigationApproval?, _ fake: FakeNavigation) -> NavigationGate {
         NavigationGate(approval: plan, read: { _, _ in try await fake.read() },
                        input: { _, _, _ in await fake.post() })
     }

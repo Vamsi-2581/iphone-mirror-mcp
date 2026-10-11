@@ -20,6 +20,6 @@ The `stop` tool bypasses the FIFO queue and permanently disarms the current plan
 
 ## Deployment
 
-This is unvalidated experimental source. Do not use upstream installers, bundles or releases for this fork. The fork installer intentionally fails rather than install. Local build/runtime require operator approval; begin with offline tests and an explicitly approved harmless Settings screen. No private Instagram session is authorized merely by building or connecting this server. Inbox-wide scanning, message/reply buttons, external links, community joins, and message sending are outside this prototype's scope.
+This is experimental source with a successful debug build and targeted offline checks; actual device behavior remains unvalidated. Do not use upstream installers, bundles or releases for this fork. The fork installer intentionally fails rather than install. Local build/runtime require operator approval; begin with offline tests and an explicitly approved harmless Settings screen. No private Instagram session is authorized merely by building or connecting this server. Inbox-wide scanning, message/reply buttons, external links, community joins, and message sending are outside this prototype's scope.
 
 Retain the MIT license and upstream credits. Report fork-specific issues privately to the repository owner; do not publish private OCR, screenshots or approval files in an issue.

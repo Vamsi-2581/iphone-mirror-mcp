@@ -25,4 +25,4 @@ assert 'MirrorSession().doctor()' not in (root / 'Sources/MirrorServer/CommandLi
 assert 'swift build' not in (root / 'install.sh').read_text()
 assert 'exit 2' in (root / 'install.sh').read_text()
 assert not (root / 'server.json').exists()
-print('Static restricted-surface checks passed. Runtime behavior is unverified.')
+print('Static restricted-surface checks passed. Device behavior remains unverified.')
