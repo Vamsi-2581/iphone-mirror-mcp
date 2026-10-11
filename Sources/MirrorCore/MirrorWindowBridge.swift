@@ -116,9 +116,8 @@ public final class MirrorWindowBridge: @unchecked Sendable {
         return CGRect(origin: position, size: size)
     }
 
-    /// Detect the session state. When connected, the mirroring surface is an
-    /// opaque video with NO AX children; a paused/interrupted session shows
-    /// overlay UI, which appears as children of the window's hosting view.
+    /// Connected video may expose only window/toolbar chrome while hovered.
+    /// Unknown children remain blocked as a possible interruption overlay.
     public func state() -> MirroringState {
         guard findProcess() != nil else { return .notRunning }
         guard let (window, _) = mainWindowElement() else { return .noWindow }
@@ -128,11 +127,36 @@ public final class MirrorWindowBridge: @unchecked Sendable {
             return .noWindow
         }
         var hostChildrenRef: CFTypeRef?
-        AXUIElementCopyAttributeValue(hostingView, kAXChildrenAttribute as CFString, &hostChildrenRef)
-        if let hostChildren = hostChildrenRef as? [AXUIElement], !hostChildren.isEmpty {
+        guard AXUIElementCopyAttributeValue(hostingView, kAXChildrenAttribute as CFString, &hostChildrenRef) == .success,
+              let hostChildren = hostChildrenRef as? [AXUIElement] else { return .noWindow }
+        if !hostChildren.allSatisfy({ Self.onlyKnownChrome($0, depth: 0) }) {
             return .paused
         }
         return .connected
+    }
+
+    static func knownChromeButton(role: String, subrole: String?, identifier: String?) -> Bool {
+        role == kAXButtonRole as String &&
+            (["AXCloseButton", "AXMinimizeButton", "AXZoomButton"].contains(subrole ?? "")
+             || ["app.grid.3x3", "iphone.app.switcher"].contains(identifier ?? ""))
+    }
+
+    static func onlyKnownChrome(_ element: AXUIElement, depth: Int) -> Bool {
+        guard depth <= 8 else { return false }
+        func string(_ attribute: String) -> String? {
+            var value: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success else { return nil }
+            return value as? String
+        }
+        guard let role = string(kAXRoleAttribute) else { return false }
+        if role == kAXButtonRole as String {
+            return knownChromeButton(role: role, subrole: string(kAXSubroleAttribute), identifier: string(kAXIdentifierAttribute))
+        }
+        guard role == kAXGroupRole as String else { return false }
+        var children: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &children) == .success,
+              let nodes = children as? [AXUIElement], !nodes.isEmpty else { return false }
+        return nodes.allSatisfy { onlyKnownChrome($0, depth: depth+1) }
     }
 
     /// Titles of overlay buttons that free a paused/interrupted session,

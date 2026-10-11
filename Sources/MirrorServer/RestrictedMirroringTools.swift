@@ -4,8 +4,11 @@ import MirrorCore
 
 enum RestrictedMirroringTools {
     static func all(session: MirrorSession, approval: NavigationApproval? = nil) -> [RegisteredTool] {
+        // Operator-provided navigation labels improve proper-name recognition.
+        // Vocabulary remains local; it cannot grant approval or lower confidence.
+        let vocabulary = Array(Set((approval?.steps ?? []).flatMap { [$0.beforeText, $0.afterText] + ($0.targetText.map { [$0] } ?? []) })).sorted()
         let gate = NavigationGate(approval: approval,
-            read: { id, bounds in try await session.restrictedFrame(windowID: id, bounds: bounds) },
+            read: { id, bounds in try await session.restrictedFrame(windowID: id, bounds: bounds, customWords: vocabulary) },
             input: { geometry, from, to in try await session.restrictedInput(geometry: geometry, from: from, to: to) })
         let empty: Value = .object(["type": .string("object"), "properties": .object([:]), "additionalProperties": .bool(false)])
         return [
@@ -16,7 +19,9 @@ enum RestrictedMirroringTools {
             },
             RegisteredTool(name: "read_screen", description: "Read OCR only for the locally approved, visible, focused window. Requires private approval file; limited to 20 calls.", schema: empty) { args in
                 try args.only([])
-                return textResult(describeElements(try await gate.readScreen()))
+                let frame = try await gate.readFrame()
+                let size = frame.geometry.imagePixelSize
+                return textResult("Frame: windowID=\(frame.geometry.windowID) size=(\(Int(size.width)),\(Int(size.height)))\n" + describeElements(frame.elements))
             },
             RegisteredTool(name: "navigate", description: "Execute the next step ID in the operator's local approval file. Coordinates and labels cannot be provided through MCP. Stops on failed verification.", schema: .object([
                 "type": .string("object"), "properties": .object(["step_id": .object(["type": .string("string"), "description": .string("ID of the next locally approved navigation step.")])]),

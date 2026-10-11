@@ -9,11 +9,13 @@ public enum MirrorOCR {
     public static func recognizeText(
         in image: CGImage,
         fast: Bool = false,
-        languages: [String] = ["en-US"]
+        languages: [String] = ["en-US"],
+        customWords: [String] = []
     ) throws -> [OCRElement] {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = fast ? .fast : .accurate
         request.usesLanguageCorrection = true
+        request.customWords = customWords
         if !languages.isEmpty { request.recognitionLanguages = languages }
 
         let handler = VNImageRequestHandler(cgImage: image, options: [:])

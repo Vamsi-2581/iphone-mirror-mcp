@@ -11,6 +11,14 @@ struct NavigationApproval: Codable, Sendable {
         let beforeText: String
         let afterText: String
         let targetText: String?
+        let beforeRegion: String?
+        let afterRegion: String?
+        let targetRegion: String?
+        init(id: String, operation: String, beforeText: String, afterText: String, targetText: String?,
+             beforeRegion: String? = nil, afterRegion: String? = nil, targetRegion: String? = nil) {
+            self.id = id; self.operation = operation; self.beforeText = beforeText; self.afterText = afterText
+            self.targetText = targetText; self.beforeRegion = beforeRegion; self.afterRegion = afterRegion; self.targetRegion = targetRegion
+        }
     }
     let windowID: UInt32
     let x: Double
@@ -33,6 +41,7 @@ struct NavigationApproval: Codable, Sendable {
                   ["tap_text", "back", "scroll_up", "scroll_down"].contains(step.operation),
                   !step.beforeText.isEmpty, !step.afterText.isEmpty,
                   step.beforeText.count <= 200, step.afterText.count <= 200,
+                  [step.beforeRegion, step.afterRegion, step.targetRegion].allSatisfy({ $0 == nil || ["header", "content"].contains($0!) }),
                   step.operation != "tap_text" || !(step.targetText ?? "").isEmpty else {
                 throw MirrorError("Invalid approved navigation step.")
             }
@@ -93,8 +102,13 @@ actor NavigationGate {
         }
         return frame
     }
-    static func matches(_ text: String, _ frame: RestrictedFrame) -> [OCRElement] {
-        frame.elements.filter { $0.text == text && $0.confidence >= 0.9 }
+    static func matches(_ text: String, _ frame: RestrictedFrame, region: String? = nil) -> [OCRElement] {
+        frame.elements.filter {
+            let y = $0.center.y / frame.geometry.imagePixelSize.height
+            let inRegion = region == nil || (region == "header" && y >= 0.08 && y <= 0.16)
+                || (region == "content" && y > 0.16 && y <= 0.90)
+            return $0.text == text && $0.confidence >= 0.9 && inRegion
+        }
     }
     static func signature(_ frame: RestrictedFrame) -> [String] {
         // Exclude status bar clock and toolbar; retain text and approximate position.
@@ -102,6 +116,9 @@ actor NavigationGate {
             .map { "\($0.text)|\(Int($0.center.x / 8))|\(Int($0.center.y / 8))" }.sorted()
     }
     func readScreen() async throws -> [OCRElement] {
+        try await readFrame().elements
+    }
+    func readFrame() async throws -> RestrictedFrame {
         guard !busy else { throw MirrorError("Navigation busy.") }
         do {
             let plan = try current()
@@ -109,7 +126,7 @@ actor NavigationGate {
             reads += 1
             busy = true
             defer { busy = false }
-            return try await capture(plan).elements
+            return try await capture(plan)
         } catch {
             stop()
             throw MirrorError("Approved screen read failed; stopped.")
@@ -119,6 +136,7 @@ actor NavigationGate {
         guard !busy else { throw MirrorError("Navigation busy.") }
         busy = true
         defer { busy = false }
+        var stage = "precondition"
         do {
             let plan = try current()
             guard next < plan.steps.count, plan.steps[next].id == id else {
@@ -127,13 +145,14 @@ actor NavigationGate {
             let step = plan.steps[next]
             let generation = epoch
             let first = try await capture(plan)
-            guard Self.matches(step.beforeText, first).count == 1 else {
+            guard Self.matches(step.beforeText, first, region: step.beforeRegion).count == 1 else {
                 throw MirrorError("Screen precondition absent or ambiguous.")
             }
             let fresh = try await capture(plan)
+            stage = "stability"
             guard generation == epoch, fresh.geometry == first.geometry,
                   Self.signature(first) == Self.signature(fresh),
-                  Self.matches(step.beforeText, fresh).count == 1 else {
+                  Self.matches(step.beforeText, fresh, region: step.beforeRegion).count == 1 else {
                 throw MirrorError("Screen changed before navigation.")
             }
             let size = fresh.geometry.imagePixelSize
@@ -141,7 +160,7 @@ actor NavigationGate {
             var to: CGPoint? = nil
             switch step.operation {
             case "tap_text":
-                let candidates = Self.matches(step.targetText ?? "", fresh)
+                let candidates = Self.matches(step.targetText ?? "", fresh, region: step.targetRegion)
                 guard candidates.count == 1 else { throw MirrorError("Target absent or ambiguous.") }
                 from = candidates[0].center
             case "back":
@@ -159,14 +178,16 @@ actor NavigationGate {
             guard generation == epoch else { throw MirrorError("Stopped before input.") }
             // Consume before dispatch. A failed gesture is never automatically retried.
             next += 1
+            stage = "dispatch"
             try await input(fresh.geometry, from, to)
+            stage = "verification"
             let deadline = Date().addingTimeInterval(8)
             while Date() < deadline {
                 let after = try await capture(plan)
                 guard generation == epoch, after.geometry == fresh.geometry else {
                     throw MirrorError("Stopped or geometry changed during verification.")
                 }
-                if Self.signature(after) != Self.signature(fresh), Self.matches(step.afterText, after).count == 1 {
+                if Self.signature(after) != Self.signature(fresh), Self.matches(step.afterText, after, region: step.afterRegion).count == 1 {
                     if next == plan.steps.count { stop() }
                     return
                 }
@@ -175,7 +196,7 @@ actor NavigationGate {
             throw MirrorError("Navigation effect unverified.")
         } catch {
             stop()
-            throw MirrorError("Navigation blocked or unverified; plan stopped. Inspect manually.")
+            throw MirrorError("Navigation blocked or unverified; plan stopped. stage=\(stage). Inspect manually.")
         }
     }
 }

@@ -82,6 +82,28 @@ struct NavigationGateTests {
     func testExtraCoordinatesCannotBeSuppliedThroughMCP() {
         XCTAssertThrowsError(try ToolArgs(["step_id": "one", "x": 100]).only(["step_id"]))
     }
+    func testHeaderDuplicateInBodyAndInboxRow() async throws {
+        let geometry = frame("Creator").geometry
+        let header = OCRElement(text: "Creator", confidence: 0.99, box: CGRect(x: 100,y: 120,width: 120,height: 40))
+        let body = OCRElement(text: "Creator", confidence: 0.99, box: CGRect(x: 200,y: 300,width: 120,height: 40))
+        let thread = RestrictedFrame(geometry: geometry, elements: [header,body])
+        let inbox = RestrictedFrame(geometry: geometry, elements: [body,
+            OCRElement(text: "Inbox", confidence: 0.99, box: CGRect(x: 20,y: 200,width: 100,height: 40))])
+        let p = NavigationApproval(windowID: 1,x: 0,y: 0,width: 300,height: 600,
+            expiresAt: Date().timeIntervalSince1970+60, steps: [
+                .init(id: "back",operation: "back",beforeText: "Creator",afterText: "Creator",targetText: nil,beforeRegion: "header",afterRegion: "content"),
+                .init(id: "reopen",operation: "tap_text",beforeText: "Creator",afterText: "Creator",targetText: "Creator",beforeRegion: "content",afterRegion: "header",targetRegion: "content")])
+        let fake = FakeNavigation([thread,thread,inbox,inbox,inbox,thread])
+        let g = gate(p,fake)
+        try await g.navigate(id: "back"); try await g.navigate(id: "reopen")
+        let count = await fake.count(); XCTAssertEqual(count,2)
+        XCTAssertEqual(NavigationGate.matches("Creator",thread,region: "header").count,1)
+        XCTAssertEqual(NavigationGate.matches("Creator",inbox,region: "header").count,0)
+        let ambiguous = RestrictedFrame(geometry: geometry,elements: [header,header,body])
+        let blocked = FakeNavigation([ambiguous]); let blockedGate = gate(p,blocked)
+        await fails(blockedGate,id: "back")
+        let blockedCount = await blocked.count(); XCTAssertEqual(blockedCount,0)
+    }
 }
 
 @main
@@ -95,7 +117,14 @@ struct OfflineMain {
         await checks.testPostVerificationFailureDoesNotRetryInput()
         await checks.testStopDisarmsAndInvalidPlansReject()
         checks.testExtraCoordinatesCannotBeSuppliedThroughMCP()
-        print("PASS: 7 restricted navigation safety checks; real device input disabled (mock dependencies only).")
+        try await checks.testHeaderDuplicateInBodyAndInboxRow()
+        XCTAssertEqual(MirrorWindowBridge.knownChromeButton(role: "AXButton", subrole: nil, identifier: "app.grid.3x3"), true)
+        XCTAssertEqual(MirrorWindowBridge.knownChromeButton(role: "AXButton", subrole: nil, identifier: "iphone.app.switcher"), true)
+        XCTAssertEqual(MirrorWindowBridge.knownChromeButton(role: "AXButton", subrole: "AXCloseButton", identifier: nil), true)
+        XCTAssertEqual(MirrorWindowBridge.knownChromeButton(role: "AXButton", subrole: nil, identifier: "resume"), false)
+        XCTAssertEqual(MirrorWindowBridge.knownChromeButton(role: "AXStaticText", subrole: nil, identifier: "app.grid.3x3"), false)
+        print("PASS: 8 restricted navigation safety checks; real device input disabled (mock dependencies only).")
+        print("PASS: known window chrome accepted; unknown overlay controls remain blocked.")
     }
 }
 

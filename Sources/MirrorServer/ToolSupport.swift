@@ -151,7 +151,7 @@ public func describeElements(_ elements: [OCRElement]) -> String {
     guard !elements.isEmpty else { return "No text recognized on screen." }
     let lines = elements.map { element in
         let box = element.box
-        return "\"\(element.text)\" — center=(\(Int(element.center.x)), \(Int(element.center.y))) box=(\(Int(box.minX)),\(Int(box.minY)),\(Int(box.width))x\(Int(box.height))) conf=\(String(format: "%.2f", element.confidence))"
+        return "\"\(element.text)\" — center=(\(Int(element.center.x)), \(Int(element.center.y))) box=(\(Int(box.minX)),\(Int(box.minY)),\(Int(box.width))x\(Int(box.height))) conf=\(String(element.confidence))"
     }
     return lines.joined(separator: "\n")
 }

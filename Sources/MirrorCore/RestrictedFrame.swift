@@ -21,10 +21,10 @@ extension MirrorSession {
         return info
     }
 
-    public func restrictedFrame(windowID: UInt32, bounds: CGRect) async throws -> RestrictedFrame {
+    public func restrictedFrame(windowID: UInt32, bounds: CGRect, customWords: [String] = []) async throws -> RestrictedFrame {
         let info = try approvedWindow(windowID, bounds: bounds)
         let capture = try await MirrorCapture.capture(windowInfo: info)
-        let elements = try MirrorOCR.recognizeText(in: capture.image)
+        let elements = try MirrorOCR.recognizeText(in: capture.image, customWords: customWords)
         _ = try approvedWindow(windowID, bounds: bounds)
         return RestrictedFrame(geometry: capture.geometry, elements: elements)
     }
