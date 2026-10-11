@@ -2,7 +2,7 @@
 
 A restricted fork of [nickatnight96/iphone-mirror-mcp](https://github.com/nickatnight96/iphone-mirror-mcp), based on commit `5a676528ec7779ec49927f7469c7aebc0806125c`. MIT license and upstream copyright are preserved. Upstream gesture-engine attribution is retained in source comments.
 
-**Experimental source: debug build, targeted offline checks and a narrow Settings device test pass.** A local collector now connects over stdio; its approved Instagram OCR and one conversation scroll passed. Back/reopen coverage remains incomplete. This is not a general inbox collector.
+**Experimental source: debug build, targeted offline checks and narrow Settings/Instagram tests pass.** A local collector connects over stdio; approved Instagram OCR, one scroll, Back and reopening the same conversation verified across two plans. This is not a general inbox collector.
 
 ## Changes
 
@@ -42,4 +42,4 @@ Open, resume, and focus iPhone Mirroring manually. A trusted local client launch
 
 On 2026-10-11, the debug fork compiled on Apple Silicon with all seven dependencies pinned by Package.resolved. Eight safety checks exercise the actual NavigationGate with mock dependencies, including region disambiguation, and real stdio checks verify initialization, the four-tool catalog and 21 tool calls without approval. Static and known-chrome checks pass. The parent collector passes 60 Python tests and synthetic GUI integration checks. Full upstream XCTest cannot compile with the installed Command Line Tools and is not reported as passing.
 
-A separately approved Settings test verified memory-only capture/OCR, paired coordinates, Battery tap, scroll and Back. The subsequent collector connection verified approved Instagram OCR and one scroll; Back/reopen live coverage is incomplete. Capture deadlines and genuine pause/focus loss interrupted some runs. General inbox scanning, arbitrary layouts/devices, movement/resize coverage and immediate in-flight cancellation remain unverified. See [DEVICE_TEST.md](DEVICE_TEST.md) for evidence and [SECURITY.md](SECURITY.md) for the trust boundary.
+A separately approved Settings test verified memory-only capture/OCR, paired coordinates, Battery tap, scroll and Back. The subsequent collector connection verified approved Instagram OCR, one scroll, Back and same-conversation reopen across two plans. Capture deadlines and genuine pause/focus loss interrupted earlier attempts. Mirroring must remain manually focused. General inbox scanning, arbitrary layouts/devices, movement/resize coverage and immediate in-flight cancellation remain unverified. See [DEVICE_TEST.md](DEVICE_TEST.md) for evidence and [SECURITY.md](SECURITY.md) for the trust boundary.
