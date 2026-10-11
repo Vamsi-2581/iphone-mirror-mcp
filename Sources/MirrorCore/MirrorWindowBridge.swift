@@ -77,15 +77,7 @@ public final class MirrorWindowBridge: @unchecked Sendable {
         guard let app = findProcess() else { return nil }
         let pid = app.processIdentifier
         if let info = Self.windowMatch(pid: pid, options: .optionOnScreenOnly) { return info }
-        // The window may be hidden or on another Space. optionAll still
-        // lists it WITH its real window ID — which downstream capture
-        // needs: with windowID 0, SCK's bundle-based guess can land on one
-        // of the app's phantom windows and return a blank strip.
-        if let info = Self.windowMatch(pid: pid, options: .optionAll) { return info }
-        // Last resort: AX geometry (no window ID).
-        guard let (element, axPid) = mainWindowElement(),
-              let geometry = Self.axGeometry(of: element) else { return nil }
-        return MirrorWindowInfo(windowID: 0, bounds: geometry, pid: axPid)
+        return nil
     }
 
     private static func windowMatch(pid: pid_t, options: CGWindowListOption) -> MirrorWindowInfo? {
@@ -304,80 +296,13 @@ public final class MirrorWindowBridge: @unchecked Sendable {
         return frontmostPID() == pid
     }
 
+    /// Restricted fork: report focus; never activate or request Automation.
     public func activate() -> Bool {
         guard let app = findProcess() else { return false }
-        let pid = app.processIdentifier
-        if frontmostPID() == pid { return true }
-        app.activate()
-        if becameFrontmost(pid, withinUs: Self.activationSettleUs) {
-            usleep(Self.unhideSettleUs)
-            return true
-        }
-        // Cooperative activation routinely DENIES a background process's
-        // NSRunningApplication.activate(). Routing the request through
-        // Launch Services — the same path mirror_launch uses — is honored
-        // from this server's context.
-        let semaphore = DispatchSemaphore(value: 0)
-        let configuration = NSWorkspace.OpenConfiguration()
-        configuration.activates = true
-        NSWorkspace.shared.openApplication(
-            at: URL(fileURLWithPath: Self.appPath), configuration: configuration
-        ) { _, _ in semaphore.signal() }
-        _ = semaphore.wait(timeout: .now() + 3)
-        if becameFrontmost(pid, withinUs: Self.activationSettleUs) {
-            usleep(Self.unhideSettleUs)
-            return true
-        }
-        Self.runAppleScriptOnMainThread("""
-            tell application "System Events"
-                tell process "\(Self.processName)"
-                    set frontmost to true
-                end tell
-            end tell
-            """)
-        _ = becameFrontmost(pid, withinUs: Self.activationSettleUs)
-        guard let front = frontmostPID() else {
-            // Focus query unavailable: assume the fallbacks worked rather
-            // than fail input that may well deliver.
-            return true
-        }
-        if front == pid {
-            usleep(Self.unhideSettleUs)
-            return true
-        }
-        return false
+        return frontmostPID() == app.processIdentifier
     }
 
-    /// NSAppleScript is documented main-thread-only; the caller usually runs
-    /// on an actor's cooperative thread, so hop to the main queue for the
-    /// execution itself (the surrounding sleeps stay off the main thread).
-    /// Returns false when the script errored (e.g. the Automation
-    /// permission for System Events is missing).
-    @discardableResult
-    static func runAppleScriptOnMainThread(_ source: String) -> Bool {
-        let work: () -> Bool = {
-            var errorInfo: NSDictionary?
-            NSAppleScript(source: source)?.executeAndReturnError(&errorInfo)
-            return errorInfo == nil
-        }
-        if Thread.isMainThread {
-            return work()
-        }
-        return DispatchQueue.main.sync(execute: work)
-    }
-
-    /// Clicks via System Events at a screen position. Unlike posted CGEvent
-    /// clicks — which iPhone Mirroring resolves at its INTERNAL pointer
-    /// position, stale until the pointer has fully re-engaged — System
-    /// Events clicks are position-authoritative: every one observed live
-    /// (2026-08-12/13) landed exactly where aimed, regardless of pointer
-    /// engagement state. Requires the app to be frontmost (System Events
-    /// clicks the frontmost process's UI at that point) and the Automation
-    /// permission; returns false when the script fails so callers can fall
-    /// back to a CGEvent click.
-    public static func systemEventsClick(at point: CGPoint) -> Bool {
-        runAppleScriptOnMainThread(systemEventsClickSource(at: point))
-    }
+    public static func systemEventsClick(at point: CGPoint) -> Bool { false }
 
     static func systemEventsClickSource(at point: CGPoint) -> String {
         "tell application \"System Events\" to click at {\(Int(point.x.rounded())), \(Int(point.y.rounded()))}"

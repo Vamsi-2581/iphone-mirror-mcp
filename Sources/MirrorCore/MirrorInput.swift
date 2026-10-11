@@ -92,7 +92,9 @@ public enum MirrorInput {
     static func placeCursor(
         at point: CGPoint, through waypoint: CGPoint? = nil, windowBounds: CGRect? = nil
     ) throws {
-        if !CGPreflightPostEventAccess() { CGRequestPostEventAccess() }
+        guard CGPreflightPostEventAccess() else {
+            throw MirrorError("Post-event access is missing. No permission request was made.")
+        }
         for attempt in 0..<3 {
             var start = CGEvent(source: nil)?.location ?? point
             // The waypoint leg exists to absorb the pointer-engagement

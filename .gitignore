@@ -9,3 +9,6 @@ dist/
 .build-arm64/
 .build-x86_64/
 .build-universal/
+
+# Private operator approvals
+*approval*.json

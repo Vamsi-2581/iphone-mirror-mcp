@@ -50,7 +50,7 @@ final class CommandLineTests: XCTestCase {
     /// by hand. These are the specific things a stuck user needs from it.
     func testHelpTextCoversSetupEssentials() {
         let help = CLI.helpText
-        for expected in ["doctor", "Accessibility", "Screen Recording", "stdio", "mcpServers"] {
+        for expected in ["doctor", "MIRROR_APPROVAL_FILE", "manually", "requests no permissions"] {
             XCTAssertTrue(help.contains(expected), "help text is missing \"\(expected)\"")
         }
         XCTAssertTrue(help.contains(MirrorMCPServer.version), "help text should state the version")

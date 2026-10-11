@@ -1,3 +1,5 @@
+> Historical upstream documentation. The restricted fork has a different tool surface and installation process. Follow the root README.md and SECURITY.md.
+
 # Architecture
 
 ```

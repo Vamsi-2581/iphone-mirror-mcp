@@ -1,3 +1,5 @@
+> Historical upstream documentation. The restricted fork has a different tool surface and installation process. Follow the root README.md and SECURITY.md.
+
 # Getting started
 
 From nothing to a model tapping buttons on your iPhone. Budget about ten

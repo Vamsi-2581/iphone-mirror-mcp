@@ -30,9 +30,9 @@ final class EndToEndProtocolTests: XCTestCase {
     func testInitializeAndListTools() async throws {
         try await withConnectedClient { client in
             let (tools, _) = try await client.listTools()
-            XCTAssertGreaterThanOrEqual(tools.count, 30)
-            XCTAssertTrue(tools.contains { $0.name == "screenshot" })
-            XCTAssertTrue(tools.contains { $0.name == "run_on_iphone" })
+            XCTAssertEqual(tools.count, 4)
+            XCTAssertTrue(tools.contains { $0.name == "navigate" })
+            XCTAssertFalse(tools.contains { $0.name == "run_on_iphone" })
             // Every tool must expose an object schema over the wire.
             for tool in tools {
                 XCTAssertEqual(tool.inputSchema.objectValue?["type"]?.stringValue, "object", tool.name)
@@ -53,21 +53,21 @@ final class EndToEndProtocolTests: XCTestCase {
 
     func testMissingRequiredArgumentReturnsIsError() async throws {
         try await withConnectedClient { client in
-            let (content, isError) = try await client.callTool(name: "tap", arguments: [:])
+            let (content, isError) = try await client.callTool(name: "navigate", arguments: [:])
             XCTAssertEqual(isError, true)
             guard case .text(let text, _, _)? = content.first else {
                 return XCTFail("expected text content")
             }
-            XCTAssertTrue(text.contains("x"), "error should name the missing parameter: \(text)")
+            XCTAssertTrue(text.contains("step_id"), "error should name the missing parameter: \(text)")
         }
     }
 
-    func testRecordScreenRejectsMissingRequiredSeconds() async throws {
-        // "seconds" is schema-required; the handler must enforce it rather
-        // than silently defaulting.
+    func testForbiddenToolsAndUnapprovedReadsFail() async throws {
         try await withConnectedClient { client in
-            let (_, isError) = try await client.callTool(name: "record_screen", arguments: [:])
-            XCTAssertEqual(isError, true)
+            for name in ["tap", "swipe", "record_screen", "read_clipboard", "paste_text", "open_url", "mirror_launch", "batch", "read_screen"] {
+                let (_, isError) = try await client.callTool(name: name, arguments: [:])
+                XCTAssertEqual(isError, true, name)
+            }
         }
     }
 

@@ -13,33 +13,8 @@ final class ToolCatalogTests: XCTestCase {
         XCTAssertEqual(names.count, Set(names).count, "duplicate tool names: \(names)")
     }
 
-    func testExpectedToolCountAndFlagship() {
-        let names = Set(allTools().map(\.tool.name))
-        XCTAssertGreaterThanOrEqual(names.count, 30, "expected a rich tool surface, got \(names.count)")
-        for required in [
-            "status", "mirror_launch", "screenshot", "tap", "double_tap", "long_press",
-            "swipe", "drag", "type_text", "press_key", "home", "app_switcher", "spotlight",
-            "launch_app", "open_url", "shake", "read_screen", "find_text", "tap_text",
-            "wait_for_text", "scroll_to", "record_screen",
-            "xcode_list", "xcode_build", "xcode_test", "devices", "device_install",
-            "device_launch", "run_on_iphone", "sim_boot", "sim_install", "sim_launch",
-            "sim_terminate", "sim_screenshot", "sim_openurl",
-            // Phase 1
-            "paste_text", "read_clipboard", "mirror_restart", "doctor",
-            "run_on_sim", "sim_log", "xcresult_attachments",
-            // Phase 2
-            "record_start", "record_stop", "wait_for_screen_change",
-            "annotated_screenshot", "batch",
-            "sim_push", "sim_privacy", "sim_appearance", "sim_location",
-            "sim_statusbar", "sim_addmedia", "sim_uninstall", "sim_erase", "sim_apps",
-            "device_info", "device_apps", "device_uninstall",
-            // Phase 3
-            "find_image", "tap_image",
-            // Phase 4
-            "notifications", "notification_click",
-        ] {
-            XCTAssertTrue(names.contains(required), "missing tool \(required)")
-        }
+    func testOnlyRestrictedToolsAreExposed() {
+        XCTAssertEqual(Set(allTools().map(\.tool.name)), ["status", "read_screen", "navigate", "stop"])
     }
 
     func testEverySchemaIsAnObjectWithValidRequiredKeys() throws {

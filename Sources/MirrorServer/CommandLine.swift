@@ -51,43 +51,12 @@ public enum CLI {
     public static var helpText: String {
         """
         \(versionLine)
-
-        An MCP server that drives a real iPhone through the macOS iPhone
-        Mirroring app, and runs Xcode builds/tests on simulators and devices.
-
-        USAGE
-          iphone-mirror-mcp              Start the MCP server on stdio (default).
-                                         MCP clients invoke the binary this way;
-                                         run by hand it waits silently for input.
-          iphone-mirror-mcp doctor       Check permissions and the mirroring
-                                         session, then exit. Run this FIRST.
-          iphone-mirror-mcp --version    Print the version and exit.
-          iphone-mirror-mcp --help       Print this help and exit.
-
-        SETUP
-          This server needs macOS permissions granted to whichever app LAUNCHES
-          it — your terminal, or the desktop app hosting the MCP client — not to
-          the binary itself:
-
-            Accessibility      System Settings → Privacy & Security → Accessibility
-            Screen Recording   System Settings → Privacy & Security → Screen & System Audio Recording
-            Automation         granted on first use (System Events)
-
-          `doctor` verifies all of them end to end, including whether synthetic
-          input is actually being delivered.
-
-        CONNECTING A CLIENT
-          Any MCP client that speaks stdio works. Point it at this binary with
-          no arguments, for example:
-
-            {"mcpServers": {"iphone-mirror": {"command": "/path/to/iphone-mirror-mcp"}}}
-
-          See docs/getting-started.md for per-client configuration.
-
-        EXIT CODES
-          0  success
-          1  doctor ran, but one or more checks failed
-          2  bad usage
+        Restricted iPhone Mirroring navigation feasibility server.
+        Usage: iphone-mirror-mcp [serve | doctor | --version | --help]
+        doctor reads permission/session flags only; it does not test input or capture.
+        Set MIRROR_APPROVAL_FILE to a private, operator-written approval plan before serve.
+        Without a plan, only status and stop work. See README.md and SECURITY.md.
+        Open, focus and resume Mirroring manually. This server requests no permissions.
         """
     }
 
@@ -108,15 +77,10 @@ public enum CLI {
             return ExitCode.ok
 
         case .doctor:
-            let report = await MirrorSession().doctor()
-            print(report.describe())
-            let healthy = report.accessibility && report.screenRecording && report.postEventAccess
-            if !healthy {
-                print("")
-                print("Some checks failed. Grant the permissions above to the app that")
-                print("launches this server, then run `iphone-mirror-mcp doctor` again.")
-            }
-            return healthy ? ExitCode.ok : ExitCode.checksFailed
+            let report = await MirrorSession().status()
+            print("Session: \(report.state)\n\(report.permissions.description)")
+            return report.permissions.accessibility && report.permissions.screenRecording
+                ? ExitCode.ok : ExitCode.checksFailed
 
         case .unknown(let argument):
             FileHandle.standardError.write(Data("Unknown argument \"\(argument)\".\n\n".utf8))

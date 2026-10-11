@@ -1,3 +1,5 @@
+> Historical upstream documentation. The restricted fork has a different tool surface and installation process. Follow the root README.md and SECURITY.md.
+
 # Recipes
 
 Worked patterns for driving a real iPhone. Prompts are written the way you

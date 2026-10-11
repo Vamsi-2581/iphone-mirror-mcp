@@ -36,6 +36,7 @@ public actor MirrorSession {
 
     public struct Status: Sendable {
         public let state: MirroringState
+        public let windowID: UInt32?
         public let windowBounds: CGRect?
         public let orientation: String?
         public let permissions: PermissionStatus
@@ -50,6 +51,7 @@ public actor MirrorSession {
         }
         return Status(
             state: bridge.state(),
+            windowID: info?.windowID,
             windowBounds: info?.bounds,
             orientation: orientation,
             permissions: PermissionStatus.current(),
@@ -66,7 +68,7 @@ public actor MirrorSession {
     // MARK: - Readiness
 
     /// Ensures the session can be used: app running, window present, session
-    /// connected (auto-dismissing pause overlays), and — for input — the
+    /// connected (manual resume only), and — for input — the
     /// Accessibility permission granted and the window frontmost.
     @discardableResult
     func ensureReady(forInput: Bool) -> MirrorError? {
@@ -78,12 +80,7 @@ public actor MirrorSession {
         case .noWindow:
             return MirrorError.windowNotFound()
         case .paused:
-            attemptResume()
-            if bridge.state() != .connected {
-                return MirrorError(
-                    "The mirroring session is paused and could not be resumed automatically.",
-                    remediation: "Make sure the iPhone is locked and not in use, then click Resume in the iPhone Mirroring window.")
-            }
+            return MirrorError("Mirroring is paused. Resume it manually; automation remains stopped.")
         case .connected:
             break
         }
@@ -96,47 +93,11 @@ public actor MirrorSession {
             // outcome when activation does not take.
             guard bridge.activate() else {
                 return MirrorError(
-                    "Could not bring the iPhone Mirroring window to the front; input would be silently dropped.",
-                    remediation: "Click the iPhone Mirroring window once to focus it. If macOS prompted for the Automation (System Events) permission, grant it to the app hosting this server, then retry.")
+                    "iPhone Mirroring is not positively identified as frontmost; input is blocked.",
+                    remediation: "Focus iPhone Mirroring manually, then start a new approved plan.")
             }
         }
         return nil
-    }
-
-    /// Tries the AX press first, then a real HID click. AXUIElementPerformAction
-    /// can return .success while the overlay ignores the press, so success is
-    /// judged ONLY by the session state afterwards — never by the AX return
-    /// value.
-    private func attemptResume() {
-        if bridge.pressResumeButton() {
-            usleep(Self.resumeSettleUs)
-            if bridge.state() == .connected { return }
-        }
-        // AX press missing or not honored: real click at the button.
-        if let center = bridge.resumeButtonCenter() {
-            bridge.activate()
-            if !MirrorWindowBridge.systemEventsClick(at: center) {
-                try? MirrorInput.tap(at: center)
-            }
-            usleep(Self.resumeSettleUs)
-            if bridge.state() == .connected { return }
-        }
-        // The overlay often exposes NO AX button at all (observed live: a
-        // single bare AXGroup) — but the dismiss control still renders at a
-        // predictable spot: the "Resume" variant at the window center, the
-        // "iPhone in Use → Connect" variant at ~65% height. Click each in
-        // turn, re-checking paused right before every click so a session
-        // that resumed on its own doesn't take a stray tap on the live
-        // phone screen.
-        for clickPoint in Self.pauseOverlayClickPoints(for: bridge.windowInfo()?.bounds) {
-            guard bridge.state() == .paused else { return }
-            bridge.activate()
-            if !MirrorWindowBridge.systemEventsClick(at: clickPoint) {
-                try? MirrorInput.tap(at: clickPoint)
-            }
-            usleep(Self.resumeSettleUs)
-            if bridge.state() == .connected { return }
-        }
     }
 
     /// Where to click to dismiss a pause overlay that exposes no AX button:
@@ -348,8 +309,8 @@ public actor MirrorSession {
     private func assertFrontmostForInput() throws {
         guard bridge.activate() else {
             throw MirrorError(
-                "Could not bring the iPhone Mirroring window to the front; input would be silently dropped.",
-                remediation: "Click the iPhone Mirroring window once to focus it. If macOS prompted for the Automation (System Events) permission, grant it to the app hosting this server, then retry.")
+                "iPhone Mirroring is not positively identified as frontmost; input is blocked.",
+                remediation: "Focus iPhone Mirroring manually, then start a new approved plan.")
         }
     }
 

@@ -10,6 +10,10 @@ public struct ToolArgs: Sendable {
 
     public init(_ raw: [String: Value]) { self.raw = raw }
 
+    public func only(_ keys: Set<String>) throws {
+        guard Set(raw.keys).isSubset(of: keys) else { throw MirrorError("Unexpected tool arguments.") }
+    }
+
     public func string(_ key: String) throws -> String {
         guard let value = try optionalString(key) else { throw missing(key, "string") }
         return value

@@ -1,166 +1,41 @@
-# iphone-mirror-mcp
+# Restricted iPhone Mirroring feasibility fork
 
-[![CI](https://github.com/nickatnight96/iphone-mirror-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/nickatnight96/iphone-mirror-mcp/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-![Platform: macOS 15+](https://img.shields.io/badge/platform-macOS%2015%2B-lightgrey)
-![Swift 6](https://img.shields.io/badge/Swift-6-orange)
-[![Listed on mcpservers.org](https://img.shields.io/badge/mcpservers.org-listed-blue)](https://mcpservers.org/servers/nickatnight96/iphone-mirror-mcp)
-[![Clones](https://img.shields.io/endpoint?url=https%3A%2F%2Fnickatnight96.github.io%2Fiphone-mirror-mcp%2Ftraffic%2Fbadges%2Fclones.json)](https://github.com/nickatnight96/iphone-mirror-mcp/blob/traffic-data/traffic/history.json)
-[![Views](https://img.shields.io/endpoint?url=https%3A%2F%2Fnickatnight96.github.io%2Fiphone-mirror-mcp%2Ftraffic%2Fbadges%2Fviews.json)](https://github.com/nickatnight96/iphone-mirror-mcp/blob/traffic-data/traffic/history.json)
+A restricted fork of [nickatnight96/iphone-mirror-mcp](https://github.com/nickatnight96/iphone-mirror-mcp), based on commit `5a676528ec7779ec49927f7469c7aebc0806125c`. MIT license and upstream copyright are preserved. Upstream gesture-engine attribution is retained in source comments.
 
-**Let any LLM drive a real iPhone.**
+**Experimental source, not yet build-tested or device-validated. Do not treat this as an Instagram inbox collector.** The local collector still uses its existing manual workflow. This fork is a separate, unconnected backend candidate.
 
-An MCP server that controls a physical iPhone through the built-in macOS
-**iPhone Mirroring** app, and automates **Xcode** development testing — build,
-test, install, and launch on simulators and devices, then operate the app on
-the mirrored screen with taps, swipes, typing, and OCR.
+## Changes
 
-No jailbreak. Nothing installed on the phone. No XCUITest target.
+- No permission requests. Missing Screen Recording or Accessibility fails closed.
+- No automatic resume, focus activation, AppleScript fallback, or hidden-window capture.
+- ScreenCaptureKit captures the exact visible window in memory. No disk fallback; recording APIs throw.
+- MCP exposes exactly `status`, `read_screen`, `navigate`, and `stop`. Unknown tools are rejected at dispatch. Raw tap/swipe, typing, clipboard, URLs, notifications, Xcode and simulator tools are inaccessible through MCP.
+- Input and OCR reads require a trusted operator's private local approval file. Without it, only status and stop work. There is no MCP tool to create, alter, or rearm approval.
+- Approved steps run once, in order, within 15 minutes, with at most eight steps and 20 separate read calls. Navigation checks two fresh OCR frames, exact window bounds, focus, confidence and preconditions, then verifies changed screen content and a postcondition. Failures disarm the plan without retrying input.
+- The upstream installer refuses to install this fork automatically. Upstream package/registry manifests and release workflows are removed to avoid installing an unrestricted upstream binary by mistake.
 
-```
-run_on_iphone (build → install → launch on the paired iPhone)
-   → screenshot / read_screen / tap / paste_text     drive the app on-device
-   → wait_for_text / tap with expect / sim_log       assert what the user sees
-```
+## Approval and use
 
-**63 tools.** Works with Claude, GPT, Gemini, local models — anything that
-speaks MCP over stdio.
+Build and local execution need explicit operator approval. After approval, use `swift build` and `swift test` from this directory. Do not enable `MIRROR_MCP_LIVE`; legacy live tests can drive a real phone. A future device test must use a harmless Settings screen first.
 
----
-
-## Quick start
-
-```sh
-git clone https://github.com/nickatnight96/iphone-mirror-mcp.git
-cd iphone-mirror-mcp
-./install.sh
-```
-
-The installer checks your machine, builds a release binary, verifies
-permissions end to end, and prints the exact config for your client.
-
-Then, for Claude Code:
-
-```sh
-claude mcp add --scope user iphone-mirror -- ~/.local/bin/iphone-mirror-mcp
-```
-
-Or for any other MCP client:
+After successful build/tests, a trusted local operator prepares a file outside the repository with mode `0600`. Never commit a real approval file: it may contain private text and window information. The file must be owned by the launching user, cannot be a symlink, and cannot exceed 16 KiB. `expiresAt` is a Unix timestamp no more than 15 minutes after startup. `windowID`, x/y/width/height must identify the current visible Mirroring window. All labels are exact OCR strings.
 
 ```json
 {
-  "mcpServers": {
-    "iphone-mirror": {
-      "command": "/Users/YOU/.local/bin/iphone-mirror-mcp"
-    }
-  }
+  "windowID": 123,
+  "x": 100, "y": 100, "width": 300, "height": 650,
+  "expiresAt": 0,
+  "steps": [
+    {"id": "battery", "operation": "tap_text", "beforeText": "Settings", "targetText": "Battery", "afterText": "Battery"},
+    {"id": "back", "operation": "back", "beforeText": "Battery", "afterText": "Settings"}
+  ]
 }
 ```
 
-Ask your model:
+The example is deliberately expired and uses fictitious geometry; it grants no access. The operator must approve navigation-only targets. Other operations are `scroll_down` and `scroll_up`, with before/after landmarks that verify the intended scroll. `back` uses a fixed top-left point (8% width, 12% height) and must be verified visually for the approved screen before use. No arbitrary coordinates may be supplied through MCP.
 
-> Take a screenshot of my iPhone and tell me what app is open.
+Open, resume, and focus iPhone Mirroring manually. A trusted local client launches the reviewed binary with `MIRROR_APPROVAL_FILE=/absolute/private/path.json`. It calls `navigate` with only `{"step_id":"battery"}` and then the next approved ID. New actions require a new operator-approved plan and server restart. Stop or expiry prevents further reads and input.
 
-Or grab the `.mcpb` bundle from the
-[latest release](https://github.com/nickatnight96/iphone-mirror-mcp/releases/latest)
-if your client installs MCP bundles and you would rather skip the toolchain
-(see the [caveats](docs/getting-started.md#or-install-the-mcp-bundle) — it is
-ad-hoc signed but not notarized).
+## Validation status
 
-**→ [Full getting-started guide](docs/getting-started.md)** ·
-**[per-client config](docs/clients.md)**
-
-## Requirements
-
-- **macOS 15+** with iPhone Mirroring, paired to an **iOS 18+** iPhone (nearby,
-  locked, same Apple Account)
-- **Xcode** — for the `xcode_*`, `device_*`, and `sim_*` tools
-- **Accessibility** and **Screen Recording** permission, granted to the app
-  that *launches* the server (your terminal, or the desktop app hosting your
-  client) — [details](docs/getting-started.md#2-grant-permissions)
-
-Check everything at once:
-
-```sh
-iphone-mirror-mcp doctor
-```
-
-It tests all four permissions, captures a real frame, and confirms macOS is
-actually delivering synthetic input — rather than just reading permission
-flags. Run it before you suspect anything else.
-
-## What it can do
-
-| | |
-|---|---|
-| **Session & health** | `status`, `doctor`, `mirror_launch`, `mirror_restart` |
-| **See the screen** | `screenshot`, `annotated_screenshot` (every element boxed + numbered), `read_screen` (OCR with tappable centers), `find_text`, `find_image`, `record_screen` |
-| **Wait properly** | `wait_for_text`, `wait_for_screen_change`, `scroll_to` |
-| **Input** | `tap` (with `expect` verification), `double_tap`, `long_press`, `swipe`, `drag`, `type_text`, `paste_text` (emoji/CJK via clipboard), `read_clipboard`, `press_key`, `shake`, `batch` |
-| **Navigate** | `home`, `app_switcher`, `spotlight`, `launch_app`, `open_url` |
-| **Notifications** | `notifications`, `notification_click` |
-| **Xcode** | `xcode_list`, `xcode_build`, `xcode_test`, `xcresult_attachments` |
-| **Real devices** | `run_on_iphone`, `devices`, `device_install`, `device_launch`, `device_info`, `device_apps`, `device_uninstall` |
-| **Simulators** | `run_on_sim` plus the full `simctl` belt — push, GPS, privacy grants, status bar, appearance, logs, media |
-
-**→ [Complete tool reference](docs/tools.md)** — all 63, with parameters,
-generated from the server's own catalog so it cannot drift.
-
-## Coordinate contract
-
-Every `x`/`y` is a **pixel position in the most recent screenshot**, origin
-top-left. At input time the window bounds are re-queried and the pixel maps
-proportionally into the current bounds — so a window that moved or was resized
-between screenshot and tap still receives the tap in the right place.
-
-## Documentation
-
-| | |
-|---|---|
-| **[Getting started](docs/getting-started.md)** | Install → permissions → first tap |
-| **[Connecting a client](docs/clients.md)** | Claude Code, Claude Desktop, Cursor, VS Code, Zed, Codex, Windsurf |
-| **[Tool reference](docs/tools.md)** | All 63 tools and their parameters |
-| **[Recipes](docs/recipes.md)** | Driving an app, the on-device test loop, notifications, batching |
-| **[Troubleshooting](docs/troubleshooting.md)** | Symptoms → causes → fixes |
-| **[Architecture](docs/architecture.md)** | How input actually reaches the phone |
-| **[Limitations](docs/limitations.md)** | What this genuinely cannot do |
-
-## Known limitations
-
-Tested, not guessed — the [full list](docs/limitations.md) explains why.
-
-- **Pinch and rotate cannot be synthesized.** Trackpad gestures do not travel
-  the CGEvent pipeline; an event tap sees nothing during a physical pinch, so
-  there is nothing to reproduce.
-- **One phone at a time** — device switching has no scriptable menu.
-- **The session pauses whenever the phone is unlocked or picked up.** Apple's
-  design; resuming needs it locked again.
-- **No accessibility tree** — OCR and template matching are the element model.
-  Face ID, Control Center, and hardware buttons are unreachable, and DRM
-  content captures black.
-
-## Security
-
-This server can see and control whatever iPhone the Mac is paired with while
-mirroring is active. **Treat it like handing your unlocked phone to the
-model.** Run it only from clients you trust.
-
-The phone locks the session the moment it is picked up or unlocked physically,
-which is a real kill switch. `paste_text` briefly places text on the Mac
-clipboard and restores what was there; `read_clipboard` reads it.
-
-See [SECURITY.md](SECURITY.md) for the trust model and how to report a
-vulnerability.
-
-## Contributing
-
-Issues and pull requests welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
-
-```sh
-scripts/run_tests.sh                    # build + unit/protocol tests + CLI smoke
-MIRROR_MCP_LIVE=1 scripts/run_tests.sh  # + live tests (real window, capture, input)
-```
-
-## License
-
-[MIT](LICENSE)
+Swift syntax parsing and static restriction checks have passed. Regression tests for the parent Python collector passed (52 tests). New Swift safety/protocol tests are committed, but compilation, Swift tests, MCP runtime transport, ScreenCaptureKit capture, coordinate mapping, scroll behavior, and actual device cancellation remain unverified until an approved build and Settings-only test. See [SECURITY.md](SECURITY.md) before connecting a client.
